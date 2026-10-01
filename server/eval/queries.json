@@ -1,0 +1,54 @@
+{
+  "description": "Requêtes réalistes écrites comme un client (formulations libres, sans reprendre les titres des services). 4 par catégorie.",
+  "queries": [
+    { "q": "lavage intérieur avant de vendre ma voiture", "expectedCategory": "LAVAGE" },
+    { "q": "les sièges sont pleins de taches de café", "expectedCategory": "LAVAGE" },
+    { "q": "ma voiture est couverte de poussière après le sirocco", "expectedCategory": "LAVAGE" },
+    { "q": "je veux que la peinture brille comme neuve", "expectedCategory": "LAVAGE" },
+
+    { "q": "c'est le moment de changer l'huile du moteur", "expectedCategory": "VIDANGE" },
+    { "q": "voyant d'entretien allumé, 15000 km depuis la dernière révision", "expectedCategory": "VIDANGE" },
+    { "q": "la boîte auto donne des à-coups en passant les vitesses", "expectedCategory": "VIDANGE" },
+    { "q": "entretien périodique pour mon moteur gasoil", "expectedCategory": "VIDANGE" },
+
+    { "q": "la voiture tire à droite quand je roule", "expectedCategory": "PNEUS" },
+    { "q": "j'ai roulé sur un clou, mon pneu est à plat", "expectedCategory": "PNEUS" },
+    { "q": "mes pneus sont lisses il faut les changer", "expectedCategory": "PNEUS" },
+    { "q": "vibrations dans le volant à 100 km/h", "expectedCategory": "PNEUS" },
+
+    { "q": "la clim souffle de l'air chaud", "expectedCategory": "CLIM" },
+    { "q": "odeur de moisi quand j'allume la ventilation", "expectedCategory": "CLIM" },
+    { "q": "préparer la voiture pour les fortes chaleurs de l'été", "expectedCategory": "CLIM" },
+    { "q": "pas de chauffage dans l'habitacle en hiver", "expectedCategory": "CLIM" },
+
+    { "q": "la voiture ne démarre plus le matin, ça fait clic clic", "expectedCategory": "ELECTRICITE" },
+    { "q": "voyant moteur orange allumé sur le tableau de bord", "expectedCategory": "ELECTRICITE" },
+    { "q": "un de mes phares ne s'allume plus", "expectedCategory": "ELECTRICITE" },
+    { "q": "la vitre côté conducteur ne remonte plus", "expectedCategory": "ELECTRICITE" },
+
+    { "q": "quelqu'un a cabossé ma portière sur le parking", "expectedCategory": "CARROSSERIE" },
+    { "q": "rayure profonde sur l'aile avant", "expectedCategory": "CARROSSERIE" },
+    { "q": "pare-brise fissuré par un caillou", "expectedCategory": "CARROSSERIE" },
+    { "q": "pare-choc arraché après un petit accrochage", "expectedCategory": "CARROSSERIE" },
+
+    { "q": "bruit quand je freine", "expectedCategory": "MECANIQUE" },
+    { "q": "la pédale d'embrayage patine en montée", "expectedCategory": "MECANIQUE" },
+    { "q": "claquement dans les roues sur les dos d'âne", "expectedCategory": "MECANIQUE" },
+    { "q": "fumée bleue et trace d'huile sous la voiture", "expectedCategory": "MECANIQUE" },
+
+    { "q": "voiture en panne sur l'autoroute", "expectedCategory": "DEPANNAGE" },
+    { "q": "j'ai laissé mes clés dans la voiture fermée", "expectedCategory": "DEPANNAGE" },
+    { "q": "plus une goutte d'essence au milieu de la route", "expectedCategory": "DEPANNAGE" },
+    { "q": "accident, il faut remorquer ma voiture", "expectedCategory": "DEPANNAGE" }
+  ],
+  "outOfScope": [
+    "recette de couscous au poisson",
+    "réserver un hôtel à Djerba pour l'été",
+    "prix d'un iPhone 15 en Tunisie",
+    "cours particuliers de mathématiques bac",
+    "horaires du train Tunis Sousse",
+    "acheter un appartement à Sousse",
+    "météo de demain à Bizerte",
+    "réparer mon lave-linge qui fuit"
+  ]
+}
