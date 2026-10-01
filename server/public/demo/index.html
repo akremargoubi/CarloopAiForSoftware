@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CarLoop — Démo</title>
+  <link rel="stylesheet" href="demo.css">
+  <script src="demo.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">CarLoop <span>démo backend + IA</span></div>
+    <div class="status" id="model-status">Modèle : …</div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h1>Recherche sémantique de services</h1>
+      <p class="muted">Décrivez votre problème avec vos mots. Le modèle <code id="model-name">multilingual-e5-small</code>
+        tourne en local : texte → vecteur 384D → similarité cosinus avec les 48 services.</p>
+
+      <form id="search-form" class="search">
+        <input id="q" name="q" type="text" maxlength="300" placeholder="ex. bruit quand je freine" autocomplete="off" required>
+        <input id="ville" name="ville" type="text" list="villes" placeholder="Ville (optionnel)">
+        <datalist id="villes">
+          <option>Tunis</option><option>Ariana</option><option>Ben Arous</option><option>Sousse</option>
+          <option>Sfax</option><option>Nabeul</option><option>Bizerte</option><option>Monastir</option>
+          <option>Gabès</option><option>Kairouan</option>
+        </datalist>
+        <select id="limit" name="limit" aria-label="Nombre de résultats">
+          <option>3</option><option selected>5</option><option>10</option>
+        </select>
+        <button type="submit">Rechercher</button>
+      </form>
+
+      <div class="chips" id="examples" aria-label="Exemples"></div>
+      <label class="toggle"><input type="checkbox" id="compare" checked> Comparer avec la recherche par mots-clés</label>
+      <p class="error" id="search-error" hidden></p>
+
+      <div class="columns" id="results">
+        <div class="column" id="col-semantic"></div>
+        <div class="column" id="col-keyword"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Réservations et contrôle d'accès</h2>
+      <div id="auth-box">
+        <form id="login-form" class="login">
+          <select id="email" aria-label="Compte de démo">
+            <option value="client1@carloop.test">client1@carloop.test (CLIENT)</option>
+            <option value="client2@carloop.test">client2@carloop.test (CLIENT)</option>
+            <option value="pro1@carloop.test">pro1@carloop.test (PRO — Garage Ennour, Tunis)</option>
+            <option value="pro3@carloop.test">pro3@carloop.test (PRO — Ariana / Ben Arous)</option>
+            <option value="pro4@carloop.test">pro4@carloop.test (PRO — Sousse)</option>
+            <option value="pro5@carloop.test">pro5@carloop.test (PRO — Sfax)</option>
+          </select>
+          <input id="password" type="password" placeholder="Mot de passe (SEED_USER_PASSWORD)" required>
+          <button type="submit">Se connecter</button>
+        </form>
+        <div id="session" hidden>
+          Connecté : <strong id="session-user"></strong> <span class="badge" id="session-role"></span>
+          <button type="button" id="logout" class="link">Se déconnecter</button>
+        </div>
+        <p class="error" id="auth-error" hidden></p>
+      </div>
+      <p class="muted" id="reservations-help">Connectez-vous en CLIENT pour réserver depuis les résultats de recherche,
+        puis en PRO pour confirmer. Chaque action appelle l'API réelle (JWT, Zod, contrôle de propriété).</p>
+      <div id="reservations"></div>
+      <pre class="log" id="log" aria-live="polite"></pre>
+    </section>
+  </main>
+</body>
+</html>

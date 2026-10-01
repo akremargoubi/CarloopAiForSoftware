@@ -50,6 +50,7 @@ server/src/
   utils/         async-handler, http-error, validate, logger, mappers…
   scripts/       seed, reindex, eval
 server/eval/     queries.json (jeu d'évaluation), results.md (généré)
+server/public/demo/  page de démo servie sur /demo (JS navigateur typé par JSDoc, vérifié par npm run typecheck)
 server/tests/    tests Jest + Supertest
 ```
 

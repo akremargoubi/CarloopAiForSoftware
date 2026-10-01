@@ -19,4 +19,22 @@ export default tseslint.config(
       'no-var': 'error',
     },
   },
+  {
+    // Page de démo : JavaScript navigateur typé par JSDoc (// @ts-check).
+    files: ['public/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: {
+        document: 'readonly',
+        window: 'readonly',
+        fetch: 'readonly',
+        URLSearchParams: 'readonly',
+        setTimeout: 'readonly',
+        console: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off',
+    },
+  },
 );

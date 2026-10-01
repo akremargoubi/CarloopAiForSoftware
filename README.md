@@ -51,7 +51,27 @@ npm run dev
 Vérification : `curl http://localhost:3000/api/health` → `{"status":"ok","embeddingModel":"ready"}`
 puis `curl "http://localhost:3000/api/services/search?q=bruit%20quand%20je%20freine"`.
 
-> Si le port 3000 est déjà utilisé, changer `PORT` dans `server/.env`.
+> Si le port 3000 est déjà utilisé, changer `PORT` dans `server/.env` (et adapter les URL ci-dessous).
+
+## Démo (soutenance) — sans le front
+
+Ouvrir **http://localhost:3000/demo/** (page servie par le backend, même origine que l'API) :
+
+1. **Recherche sémantique** : cliquer sur un exemple ou taper un problème → résultats avec score cosinus,
+   seuil, et **comparaison côte à côte avec la recherche par mots-clés**.
+   Lien direct possible : `/demo/?q=bruit%20quand%20je%20freine&ville=Sousse`.
+2. **Réservation** : se connecter en `client1@carloop.test` (mot de passe = `SEED_USER_PASSWORD`) →
+   « Réserver » sur un résultat → la réservation apparaît en *En attente*.
+   Le bouton « Confirmer (interdit → 403) » montre le contrôle d'accès.
+3. **Côté pro** : se déconnecter, se connecter avec le PRO propriétaire du garage (voir la liste) → « Confirmer »
+   puis « Terminer » ; « Revenir en attente » montre une transition invalide (409).
+4. **Repli** : arrêter le serveur, mettre `EMBEDDING_ENABLED=false` dans `server/.env`, relancer → la recherche
+   affiche le mode `keyword` (raison : modèle indisponible). Remettre `true` ensuite.
+
+Le journal noir en bas de page affiche chaque appel HTTP réel et son code de retour.
+
+Requêtes qui illustrent bien le modèle : « voiture en panne sur l'autoroute », « la clim sent le moisi »,
+« j'ai laissé mes clés dans la voiture fermée », « recette de couscous » (hors sujet → aucun résultat).
 
 ## Comptes de démo (créés par le seed, données factices)
 

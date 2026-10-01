@@ -11,7 +11,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --ignoreConfig --noEmit --allowJs --checkJs --strict --lib ES2024,DOM --target ES2024 --types node public/demo/demo.js",
     "lint": "eslint .",
     "test": "jest --runInBand",
     "db:migrate": "prisma migrate dev",
