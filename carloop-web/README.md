@@ -58,21 +58,26 @@ The prompts are in [server/src/ai/prompts.ts](server/src/ai/prompts.ts) (use the
   - **Free hosted**: [Neon](https://neon.tech) or [Supabase](https://supabase.com) — copy the connection string and set `DATABASE_SSL=true`.
 - An OpenRouter key: <https://openrouter.ai/keys> (the app works without it; only the AI buttons show an error).
 
-### 1. Create the database
-With a local Postgres, create an empty database (pgAdmin, or `psql -U postgres -c "CREATE DATABASE carloop;"`).
-Tables and demo data are created automatically.
-
-### 2. Configure and start the API
+### 1. Database
+**Easiest (no install, no Docker):** in a first terminal run
 ```bash
 cd carloop-web/server
 npm install
-copy .env.example .env        # then edit .env: DATABASE_URL and OPENROUTER_API_KEY
+npm run db:local              # Postgres on port 5433, data kept in server/.localdb. Leave it open.
+```
+`npm run db:local:reset` wipes it. For a real Postgres or a hosted one, create an empty database and put its URL in `DATABASE_URL`.
+Tables and demo data are created automatically by the API.
+
+### 2. Configure and start the API (second terminal)
+```bash
+cd carloop-web/server
+copy .env.example .env        # then edit .env: OPENROUTER_API_KEY (DATABASE_URL already matches db:local)
 npm run dev                   # http://localhost:4000
 ```
 On start it creates the schema and seeds 8 categories, 8 providers and sample reviews
 (only if the DB is empty). `GET http://localhost:4000/api/health` should return `{"ok":true,"ai":true}`.
 
-### 3. Start the web app (second terminal)
+### 3. Start the web app (third terminal)
 ```bash
 cd carloop-web/client
 npm install
