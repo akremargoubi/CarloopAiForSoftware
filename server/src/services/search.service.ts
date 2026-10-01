@@ -69,14 +69,15 @@ function roundScores(hits: SearchHit[]): SearchHit[] {
 /**
  * Point d'entrée de GET /api/services/search : sémantique si le modèle est prêt,
  * sinon (ou en cas d'erreur / timeout) repli automatique sur la recherche par mots-clés.
- * @param params Requête validée (q, ville, limit).
+ * `mode=keyword` force la recherche par mots-clés (comparaison).
+ * @param params Requête validée (q, ville, limit, mode).
  * @returns Résultats avec le mode utilisé.
  */
 export async function searchServices(params: SearchQuery): Promise<SearchResponse> {
   const options: SearchOptions = { ville: params.ville, limit: params.limit };
-  let fallbackReason: FallbackReason = 'model_unavailable';
+  let fallbackReason: FallbackReason = params.mode === 'keyword' ? 'requested' : 'model_unavailable';
 
-  if (embeddingService.isReady()) {
+  if (params.mode === 'auto' && embeddingService.isReady()) {
     try {
       const results = await semanticSearch(params.q, { ...options, minScore: env.SEARCH_MIN_SCORE });
       return { mode: 'semantic', query: params.q, minScore: env.SEARCH_MIN_SCORE, results: roundScores(results) };

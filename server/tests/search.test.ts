@@ -125,6 +125,15 @@ describe('GET /api/services/search', () => {
     expect(mockedEmbedding.embed).not.toHaveBeenCalled();
   });
 
+  it('force la recherche par mots-clés avec mode=keyword (comparaison)', async () => {
+    const res = await request(app).get('/api/services/search').query({ q: 'plaquettes de frein', mode: 'keyword' });
+    const body = res.body as SearchBody;
+
+    expect(body.mode).toBe('keyword');
+    expect(body.fallbackReason).toBe('requested');
+    expect(mockedEmbedding.embed).not.toHaveBeenCalled();
+  });
+
   it('bascule en mots-clés si le calcul de l’embedding échoue (ex. timeout)', async () => {
     mockedEmbedding.embed.mockRejectedValue(new Error('Délai dépassé (3000 ms)'));
 

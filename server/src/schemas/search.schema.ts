@@ -13,6 +13,8 @@ export const searchQuerySchema = z.object({
     .max(MAX_QUERY_LENGTH, `La requête ne doit pas dépasser ${MAX_QUERY_LENGTH} caractères`),
   ville: citySchema.optional(),
   limit: z.coerce.number().int().min(1).max(20).default(5),
+  /** `auto` : sémantique avec repli ; `keyword` : force les mots-clés (comparaison, démo). */
+  mode: z.enum(['auto', 'keyword']).default('auto'),
 });
 
 /** Paramètres de recherche validés. */

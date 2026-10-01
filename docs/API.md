@@ -117,6 +117,7 @@ Contraintes : `title` 3..120, `description` 10..2000, `price` > 0 (≤ 100 000),
 | `q` | string | obligatoire, 1..300 caractères (après trim) |
 | `ville` | string | optionnel, 2..60 caractères, insensible à la casse |
 | `limit` | int | optionnel, 1..20, défaut 5 |
+| `mode` | string | optionnel : `auto` (défaut, sémantique avec repli) ou `keyword` (force les mots-clés, pour comparer) |
 
 Réponse `200` — mode sémantique :
 ```json
@@ -137,7 +138,7 @@ Réponse `200` — repli mots-clés (modèle non chargé, en échec ou trop lent
 ```json
 { "mode": "keyword", "query": "plaquettes de frein", "fallbackReason": "model_unavailable", "results": [ … ] }
 ```
-`fallbackReason` ∈ `model_unavailable` | `model_error`. En mode mots-clés, `score` = proportion des mots de la requête retrouvés.
+`fallbackReason` ∈ `model_unavailable` | `model_error` | `requested` (`mode=keyword`). En mode mots-clés, `score` = proportion des mots de la requête retrouvés.
 
 - Les résultats sous le seuil `minScore` (`SEARCH_MIN_SCORE`) ne sont pas renvoyés : `results: []` = aucun service pertinent.
 - `400` : `q` absent, vide ou > 300 caractères. `429` : limite de débit.

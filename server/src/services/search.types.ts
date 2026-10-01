@@ -4,7 +4,7 @@ import type { ServiceDto } from './service.mapper';
 export type SearchMode = 'semantic' | 'keyword';
 
 /** Raison du repli en mode mots-clés. */
-export type FallbackReason = 'model_unavailable' | 'model_error';
+export type FallbackReason = 'model_unavailable' | 'model_error' | 'requested';
 
 /** Options communes aux deux moteurs de recherche. */
 export interface SearchOptions {
