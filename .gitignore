@@ -1,0 +1,19 @@
+# Dépendances et builds
+node_modules/
+dist/
+coverage/
+
+# Variables d'environnement (seuls les .env.example sont commités)
+.env
+.env.*
+!.env.example
+
+# Cache du modèle d'embeddings (MODEL_CACHE_DIR)
+.model-cache/
+server/.model-cache/
+
+# Divers
+*.log
+.DS_Store
+.vscode/
+.idea/
