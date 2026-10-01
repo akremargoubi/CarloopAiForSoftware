@@ -1,0 +1,135 @@
+// Schéma de données CarLoop Web.
+// Toute modification passe par une migration : npm run db:migrate -- --name <description>
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CLIENT
+  PRO
+  ADMIN
+}
+
+enum ServiceCategory {
+  LAVAGE
+  VIDANGE
+  PNEUS
+  CLIM
+  ELECTRICITE
+  CARROSSERIE
+  MECANIQUE
+  DEPANNAGE
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  DONE
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  phone        String?
+  role         Role          @default(CLIENT)
+  createdAt    DateTime      @default(now())
+  garages      Garage[]
+  reservations Reservation[]
+  reviews      Review[]
+  diagnostics  Diagnostic[]
+}
+
+/// Profil professionnel : un utilisateur PRO peut gérer plusieurs garages.
+model Garage {
+  id          String    @id @default(cuid())
+  name        String
+  address     String
+  city        String
+  description String
+  ownerId     String
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  services    Service[]
+  reviews     Review[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([ownerId])
+  @@index([city])
+}
+
+model Service {
+  id              String          @id @default(cuid())
+  garageId        String
+  garage          Garage          @relation(fields: [garageId], references: [id], onDelete: Cascade)
+  category        ServiceCategory
+  title           String
+  description     String
+  /// Prix en dinars tunisiens (3 décimales = millimes).
+  price           Decimal         @db.Decimal(10, 3)
+  durationMinutes Int
+  /// Embedding normalisé (384 dimensions) de "titre. catégorie. description" ; [] si non indexé.
+  embedding       Float[]         @default([])
+  reservations    Reservation[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([garageId])
+  @@index([category])
+}
+
+model Reservation {
+  id          String            @id @default(cuid())
+  clientId    String
+  client      User              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  serviceId   String
+  /// Restrict : un service ayant des réservations ne peut pas être supprimé (→ 409).
+  service     Service           @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  scheduledAt DateTime
+  status      ReservationStatus @default(PENDING)
+  note        String?
+  review      Review?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([clientId])
+  @@index([serviceId])
+}
+
+/// Avis client (logique et endpoints : Amine). Une seule review par réservation DONE.
+model Review {
+  id            String      @id @default(cuid())
+  clientId      String
+  client        User        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  garageId      String
+  garage        Garage      @relation(fields: [garageId], references: [id], onDelete: Cascade)
+  reservationId String      @unique
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  /// Note de 1 à 5 (validée par Zod).
+  rating        Int
+  comment       String?
+  createdAt     DateTime    @default(now())
+
+  @@index([garageId])
+}
+
+/// Diagnostic IA (logique : Akrem). `result` contient un DiagnoseResult sérialisé.
+model Diagnostic {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    User     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  symptom   String
+  result    Json
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+}
