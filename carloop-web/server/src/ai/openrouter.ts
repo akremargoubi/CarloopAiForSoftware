@@ -27,15 +27,8 @@ function extractJson(text: string): unknown {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-/**
- * Calls OpenRouter and returns the model's answer parsed AND validated against
- * `schema`. Nothing unvalidated ever reaches the front-end.
- */
-export async function chatJson<T>(
-  system: string,
-  user: string,
-  schema: z.ZodType<T>,
-): Promise<T> {
+/** One HTTP round trip to OpenRouter; returns the raw text of the model's answer. */
+async function requestContent(system: string, user: string): Promise<unknown> {
   const { apiKey, baseUrl, model, timeoutMs, appUrl } = config.openrouter;
   if (!apiKey) {
     throw new AiError(
@@ -91,13 +84,31 @@ export async function chatJson<T>(
   } finally {
     clearTimeout(timer);
   }
+  return content;
+}
 
-  if (typeof content !== 'string') {
-    throw new AiError('AI_INVALID_OUTPUT', 502, 'Réponse IA vide.');
-  }
-  try {
-    return schema.parse(extractJson(content));
-  } catch {
-    throw new AiError('AI_INVALID_OUTPUT', 502, 'Réponse IA invalide, veuillez réessayer.');
+/**
+ * Calls OpenRouter and returns the model's answer parsed AND validated against
+ * `schema`. Nothing unvalidated ever reaches the front-end. LLM output is not
+ * deterministic, so an off-schema answer is retried once before giving up.
+ */
+export async function chatJson<T>(
+  system: string,
+  user: string,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  const attempts = 2;
+  for (let attempt = 1; ; attempt++) {
+    const content = await requestContent(system, user);
+    try {
+      if (typeof content !== 'string') throw new Error('empty answer');
+      return schema.parse(extractJson(content));
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn(`AI output rejected (attempt ${attempt}/${attempts}): ${reason}\n${content}`);
+      if (attempt >= attempts) {
+        throw new AiError('AI_INVALID_OUTPUT', 502, 'Réponse IA invalide, veuillez réessayer.');
+      }
+    }
   }
 }
