@@ -1,0 +1,48 @@
+# Deployment only (Dokploy "Compose" app). Local development uses `npm run dev`, see README.md.
+# In Dokploy: set the variables below in the Environment tab, then add a domain
+# pointing to service "client", container port 80.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: carloop
+      POSTGRES_USER: carloop
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U carloop -d carloop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build: ./server
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgres://carloop:${POSTGRES_PASSWORD}@db:5432/carloop
+      # Same origin through nginx, so CORS is not used. Kept for direct API access.
+      CORS_ORIGIN: ${APP_URL:-http://localhost}
+      APP_URL: ${APP_URL:-http://localhost}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+    expose:
+      - "4000"
+
+  client:
+    build: ./client
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      API_UPSTREAM: http://server:4000
+    expose:
+      - "80"
+
+volumes:
+  pgdata:
