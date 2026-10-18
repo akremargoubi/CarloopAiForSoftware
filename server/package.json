@@ -13,7 +13,8 @@
     "seed": "tsx src/core/seed/seed.ts",
     "seed:prod": "node dist/core/seed/seed.js",
     "lint": "eslint src",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "eval": "tsx src/eval/run.ts"
   },
   "engines": {
     "node": ">=20"
