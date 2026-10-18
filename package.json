@@ -1,0 +1,25 @@
+{
+  "name": "carloop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "CarLoop - plateforme de services automobiles avec 5 modules IA",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w server && npm run build -w client",
+    "test": "npm run test -w server && npm run test -w client",
+    "lint": "npm run lint -w server && npm run lint -w client",
+    "seed": "npm run seed -w server",
+    "format": "prettier --write \"server/src/**/*.ts\" \"client/src/**/*.{ts,tsx}\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "prettier": "^3.3.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
