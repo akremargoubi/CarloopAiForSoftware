@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { safeRedirect } from '../auth/redirect';
 import { ErrorMessage } from '../components/AiErrorDisplay';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -28,7 +29,7 @@ export function LoginPage() {
     try {
       const user = await login(email, password);
       const fallback = user.role === 'admin' ? '/admin' : user.role === 'pro' ? '/pro/garage' : '/';
-      navigate(params.get('redirect') || fallback, { replace: true });
+      navigate(safeRedirect(params.get('redirect')) ?? fallback, { replace: true });
     } catch (err) {
       setError(err);
     } finally {

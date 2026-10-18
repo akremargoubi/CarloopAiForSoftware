@@ -35,6 +35,8 @@ const env = parsed.data;
 export const config = {
   env: env.NODE_ENV,
   isTest: env.NODE_ENV === 'test',
+  /** Tests disable rate limits; the auth rate-limit test turns this on. */
+  authRateLimitInTests: false,
   port: env.PORT,
   corsOrigins: env.CORS_ORIGIN.split(',').map((o) => o.trim()),
   mongoUri: env.MONGODB_URI,

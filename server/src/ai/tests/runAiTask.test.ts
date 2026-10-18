@@ -4,7 +4,7 @@ import { config } from '../../core/config.js';
 import { closeTestDb, connectTestDb, resetAiConfig } from '../../core/tests/helpers.js';
 import { AiLogModel } from '../AiLog.model.js';
 import { AiConfigError, AiInvalidOutputError } from '../errors.js';
-import { runAiTask } from '../runAiTask.js';
+import { PROMPT_INJECTION_GUARD, runAiTask } from '../runAiTask.js';
 
 const schema = z.object({ answer: z.string(), score: z.number().min(0).max(1) });
 
@@ -59,7 +59,8 @@ describe('runAiTask', () => {
     );
     expect(result).toEqual({ answer: 'ok', score: 1 });
     const sent = JSON.parse(fetchMock.mock.calls[0][1].body);
-    expect(sent.messages[0]).toEqual({ role: 'system', content: 'system prompt' });
+    // The prompt-injection guard is appended to every system prompt.
+    expect(sent.messages[0]).toEqual({ role: 'system', content: `system prompt\n\n${PROMPT_INJECTION_GUARD}` });
     expect(sent.messages[1].content).toBe('Je suis [NOM], [TELEPHONE], [EMAIL], voiture [PLAQUE]');
     const log = await AiLogModel.findOne({ module: 'test-anon' }).lean();
     expect(log).toMatchObject({ success: true, mock: false, totalTokens: 42, piiMasked: 4 });
