@@ -127,7 +127,7 @@ export async function generatePlan(user: AuthUser, vehicleId: string): Promise<{
     mock: () => mockMaintenancePlan(context),
     knownNames: [user.name],
     temperature: 0.2,
-    maxTokens: 1500,
+    maxTokens: 6000,
   });
   plan.prochains_entretiens.sort((a, b) => a.echeance_date.localeCompare(b.echeance_date) || a.echeance_km - b.echeance_km);
 

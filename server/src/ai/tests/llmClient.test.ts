@@ -36,6 +36,17 @@ describe('llmClient', () => {
     expect(url).toBe('https://openrouter.ai/api/v1/chat/completions');
     expect(JSON.parse(init.body).model).toBe('test/model');
     expect(init.headers.Authorization).toBe('Bearer sk-test');
+    expect(JSON.parse(init.body).models).toBeUndefined();
+  });
+
+  it('sends the comma-separated fallback models to OpenRouter', async () => {
+    config.ai.model = 'a/primary:free, b/backup:free';
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, okBody));
+    vi.stubGlobal('fetch', fetchMock);
+    await callLlm(messages);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.model).toBe('a/primary:free');
+    expect(body.models).toEqual(['a/primary:free', 'b/backup:free']);
   });
 
   it('throws AiConfigError when the key is missing or rejected', async () => {

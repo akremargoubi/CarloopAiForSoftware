@@ -46,11 +46,14 @@ function backoffDelay(attempt: number, retryAfterHeader: string | null): number 
  * - Timeout via AbortController (AI_TIMEOUT_MS, 15 s by default)
  * - One retry with exponential backoff on 429 and 5xx
  * - Typed errors: AiConfigError, AiQuotaError, AiTimeoutError, AiUpstreamError, AiInvalidOutputError
+ * - OPENROUTER_MODEL may list several comma-separated models: the first is used, the others are
+ *   fallbacks tried by OpenRouter when it is unavailable or rate limited.
  */
 export async function callLlm(messages: ChatMessage[], options: LlmCallOptions = {}): Promise<LlmResponse> {
   const { apiKey, model, baseUrl, timeoutMs } = config.ai;
   if (!apiKey) throw new AiConfigError();
-  if (!model) throw new AiConfigError('Service IA non configuré : OPENROUTER_MODEL manquant');
+  const [primary, ...fallbacks] = model.split(',').map((m) => m.trim()).filter(Boolean);
+  if (!primary) throw new AiConfigError('Service IA non configuré : OPENROUTER_MODEL manquant');
 
   for (let attempt = 0; ; attempt++) {
     const controller = new AbortController();
@@ -67,11 +70,14 @@ export async function callLlm(messages: ChatMessage[], options: LlmCallOptions =
           'X-Title': 'CarLoop',
         },
         body: JSON.stringify({
-          model,
+          model: primary,
+          ...(fallbacks.length > 0 ? { models: [primary, ...fallbacks] } : {}),
           messages,
           temperature: options.temperature ?? 0.2,
-          max_tokens: options.maxTokens ?? 1200,
+          max_tokens: options.maxTokens ?? 2500,
           response_format: { type: 'json_object' },
+          // Reasoning models spend hidden tokens before answering: keep it short so the JSON is not truncated.
+          reasoning: { effort: 'low', exclude: true },
         }),
       });
     } catch (err) {
@@ -94,7 +100,11 @@ export async function callLlm(messages: ChatMessage[], options: LlmCallOptions =
       throw new AiConfigError('Service IA non configuré : clé API refusée');
     }
     if (response.status === 429 || response.status === 402) throw new AiQuotaError();
-    if (!response.ok) throw new AiUpstreamError();
+    if (!response.ok) {
+      // Server-side diagnostic only (the client receives a generic message).
+      if (!config.isTest) console.warn(`[ai] upstream error ${response.status}: ${(await response.text().catch(() => '')).slice(0, 300)}`);
+      throw new AiUpstreamError();
+    }
 
     let body: OpenAiCompletion;
     try {
@@ -106,7 +116,7 @@ export async function callLlm(messages: ChatMessage[], options: LlmCallOptions =
     if (typeof content !== 'string' || content.trim() === '') throw new AiInvalidOutputError();
     return {
       content,
-      model: body.model ?? model,
+      model: body.model ?? primary,
       usage: {
         promptTokens: body.usage?.prompt_tokens,
         completionTokens: body.usage?.completion_tokens,

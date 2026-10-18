@@ -16,7 +16,8 @@ services:
       CORS_ORIGIN: http://localhost:8080
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-nvidia/nemotron-3-super-120b-a12b:free,google/gemma-4-31b-it:free}
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-90000}
       AI_MOCK: ${AI_MOCK:-true}
 
   client:

@@ -13,8 +13,8 @@ function readToken(): string | null {
 /** Axios instance used by every module. Adds the JWT automatically. */
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/api',
-  // Slightly above the server AI timeout (15 s + 1 retry) to let the server answer first.
-  timeout: 45000,
+  // Above the server AI timeout (AI_TIMEOUT_MS = 90 s, plus one corrective retry) so the server answers first.
+  timeout: 180000,
 });
 
 api.interceptors.request.use((request) => {
