@@ -1,0 +1,30 @@
+# Full stack: MongoDB + API + front (nginx proxies /api to the "server" service, see client/nginx.conf).
+# Usage: JWT_SECRET=<random string> docker compose up --build
+services:
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
+
+  server:
+    build: ./server
+    depends_on:
+      - mongo
+    environment:
+      PORT: 4000
+      MONGODB_URI: mongodb://mongo:27017/carloop
+      CORS_ORIGIN: http://localhost:8080
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      AI_MOCK: ${AI_MOCK:-true}
+
+  client:
+    build: ./client
+    depends_on:
+      - server
+    ports:
+      - '8080:80'
+
+volumes:
+  mongo-data:

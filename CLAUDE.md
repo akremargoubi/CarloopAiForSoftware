@@ -1,109 +1,96 @@
 # CLAUDE.md — CarLoop Web
 
-Ce fichier définit le contexte et les règles **communes à toute l'équipe** (et aux assistants IA).
-Toute contribution doit les respecter. En cas de doute, demander à Firas (architecture/backend).
+Contexte et règles **communes à toute l'équipe** (et aux assistants IA). Toute contribution doit les respecter.
 
 ## Contexte
 
-CarLoop Web est une plateforme où les **clients** trouvent et réservent des services auto
-(lavage, vidange, pneus, clim, électricité, carrosserie, mécanique, dépannage), et où les
-**professionnels** gèrent leurs garages, services et réservations.
-
-Mini-projet du cours **« IA for Software Engineering » (ESPRIT)** : application web (front + back)
-avec un module IA. Le rapport doit présenter les modèles IA utilisés.
-
-Ce projet est **indépendant** du projet mobile CarLoop (Flutter) : ne pas réutiliser son code
-ni son cahier des charges.
-
-## Équipe et responsabilités
-
-| Membre  | Périmètre |
-|---------|-----------|
-| Firas   | Architecture, backend de base (auth, garages, services, réservations), recherche sémantique (modèle d'embeddings) |
-| Akrem   | Module IA de diagnostic par LLM (`POST /api/ai/diagnose`, via OpenRouter) |
-| Aziz    | Front client (`/client`) |
-| Amine   | Espace pro (front) + avis (`POST /api/reviews`, résumé IA des avis) |
-| Yassine | Tests, CI, déploiement |
+CarLoop Web : plateforme tunisienne où les **clients** trouvent, réservent et entretiennent leur véhicule,
+et où les **professionnels** (garages) gèrent services, réservations, devis et avis. Un **admin** valide
+les comptes pro. Mini-projet **« IA for Software Engineering » (ESPRIT)** : 5 modules d'IA générative
+(voir [`docs/AI.md`](docs/AI.md)). Interface et données en **français** ; prix en **TND**.
 
 ## Stack
 
-- **Backend** : Node.js 24 + Express 5 + TypeScript 6 (dossier `/server`)
-- **ORM** : Prisma 6 + PostgreSQL 16 (via `server/docker-compose.yml`)
-- **Validation** : Zod 4
-- **Auth** : JWT (`jsonwebtoken`) + `bcrypt`
-- **Modèle IA (recherche)** : `Xenova/multilingual-e5-small` exécuté **en local** via
-  `@huggingface/transformers` (ONNX int8, vecteurs de 384 dimensions). Choisi après comparaison de 4 modèles,
-  voir `docs/MODEL.md`. Tout changement de modèle impose `npm run reindex` puis `npm run eval` (recalibrer le seuil).
-- **Tests** : Jest + Supertest (base PostgreSQL de test dédiée)
-- **Frontend** : React + Vite + TypeScript (dossier `/client`)
+- Monorepo npm workspaces : `server/` et `client/`, Node ≥ 20, TypeScript strict, ESM.
+- **Serveur** : Express 4, Mongoose 8 (MongoDB), Zod 3, JWT + bcryptjs, helmet, express-rate-limit.
+- **IA** : LLM via l'API OpenRouter (compatible OpenAI), appelé uniquement par `server/src/ai/`.
+- **Client** : React 18, Vite, React Router, TanStack Query, axios, Tailwind.
+- **Tests** : Vitest partout ; Supertest + `mongodb-memory-server` côté serveur, Testing Library côté client.
 
-## Architecture backend
+## Architecture : un cœur + des modules indépendants
 
 ```
 server/src/
-  config/        env.ts (validation Zod des variables), prisma.ts (client unique)
-  routes/        déclaration des routes + middlewares (aucune logique)
-  controllers/   lecture/validation des entrées (Zod) → appel service → réponse HTTP
-  services/      logique métier + accès données via Prisma (contrôle de propriété ici)
-  middlewares/   authenticate, authorize, rate-limit, error-handler, not-found
-  schemas/       schémas Zod (body, query, params)
-  utils/         async-handler, http-error, validate, logger, mappers…
-  scripts/       seed, reindex, eval
-server/eval/     queries.json (jeu d'évaluation), results.md (généré)
-server/tests/    tests Jest + Supertest
+  core/            config (seul lecteur de process.env), db, errors, constants, middlewares,
+                   auth, users, providers, admin, seed commun, helpers de test
+  ai/              couche IA partagée : runAiTask, llmClient, anonymizer, jsonExtract, AiLog
+  features/<nom>/  un dossier par module : routes, controller, service, schema, model,
+                   prompt, mock, seed, tests/
+  features/index.ts  registre : UNE ligne par module (commenter = désactiver)
+
+client/src/
+  core/            api (axios), auth, layout, composants UI, pages communes, slots
+  features/<nom>/  module.tsx (routes, liens de menu, slots, widgets), api.ts, components/, pages/, tests/
+  features/routes.tsx  registre : UNE ligne par module
 ```
 
-Flux obligatoire : **routes → controllers → services → Prisma**. Un controller n'importe jamais
-Prisma ; un service n'importe jamais `express`.
+- Flux serveur : **routes → controller → service → modèle Mongoose**. Les routes déclarent les
+  middlewares (auth, rôle, validation) ; le controller lit la requête et répond ; la logique métier et
+  le **contrôle de propriété** sont dans le service.
+- **Un module n'importe jamais un autre module.** Il ne dépend que de `core/` et `ai/`. Les échanges passent
+  par l'API (ex. le formulaire de réservation lit `GET /api/vehicles`), par les URL
+  (`/reserver?categorie=…&vehicule=…`) ou par les **slots** du client (`provider.sections`, `home.hero`…).
+  Si un module a besoin des données d'un autre, il lit la collection MongoDB partagée, sans importer son code.
+- Contrat serveur : `FeatureModule { name, router, seed? }` (`core/types/feature.ts`), router monté sous `/api`.
+  Contrat client : `ClientFeature` (`client/src/core/types/feature.ts`).
 
-## Règles (CONTRAINTES)
+## Couche IA (obligatoire pour tout appel LLM)
 
-1. **ES2024** : `const`/`let`, `async`/`await`, jamais de callbacks.
-2. **Aucun `any`** : types explicites partout, `strict` activé (lint : `no-explicit-any` = erreur).
-3. **Toute entrée utilisateur est validée avec Zod** avant traitement (body, query, params),
-   via `validate(schema, data)` dans le controller.
-4. **Gestion d'erreurs centralisée** (`middlewares/error-handler.ts`) : codes 400/401/403/404/409/429/500/501.
-   Lever une `HttpError` (`utils/http-error.ts`). Les réponses d'erreur n'exposent **jamais**
-   de stack trace ni de détail interne. Format : `{ "error": { "code", "message", "details?" } }`.
-5. **Architecture en couches** (SOLID, SRP) : voir ci-dessus.
-6. **JSDoc sur chaque fonction exportée.**
-7. **Aucun secret en dur** : tout passe par `process.env`, validé dans `config/env.ts`.
-   L'application refuse de démarrer si une variable obligatoire manque.
-   Ne jamais lire `process.env` ailleurs que dans `config/env.ts` (sauf scripts de test).
-8. **Prisma uniquement**, jamais de SQL brut concaténé.
-9. **Mots de passe hachés avec bcrypt** ; le hash n'est **jamais** renvoyé par l'API
-   (utiliser les `select` publics des services).
-10. **Contrôle d'accès** : un PRO ne modifie que ses propres garages/services ; un CLIENT ne
-    voit que ses propres réservations. Les vérifications de propriété sont faites dans la
-    couche `services/`.
-11. **Le modèle de recherche tourne en local** : aucune donnée utilisateur envoyée à un service
-    externe (seul le téléchargement initial des poids depuis Hugging Face sort du serveur).
-    *Exception documentée* : le module de diagnostic (Akrem) appelle un LLM via OpenRouter ;
-    il ne doit envoyer **que le texte du symptôme et les infos véhicule**, jamais de donnée
-    personnelle (nom, email, téléphone, id).
-12. **Pas de dépendance inutile** : toute nouvelle dépendance doit être justifiée dans la PR.
+Tout appel passe par `runAiTask(nom, systemPrompt, message, schemaZod, { mock, knownNames })` :
+anonymisation → appel LLM (timeout, nouvel essai sur 429/5xx) → extraction du JSON → **validation Zod** →
+une seule relance corrective si la réponse est invalide → journal `AiLog` (sans donnée personnelle).
 
-## Conventions
+1. Chaque module fournit : un **prompt versionné** (`prompt.ts`), un **schéma Zod** de sortie (`schema.ts`) et
+   un **mock** déterministe (`mock.ts`) qui doit passer le même schéma.
+2. **N'envoyer au LLM que les données utiles** : jamais d'email, téléphone, plaque, identifiant, nom
+   ni coût personnel. Passer les noms connus dans `knownNames` pour qu'ils soient masqués.
+3. Vérifier en plus la cohérence avec le contexte quand c'est possible (ex. `prix_min ≤ prix_max`,
+   échéance ≥ kilométrage actuel) via `superRefine`.
+4. Erreurs typées converties en HTTP : `AI_TIMEOUT` 504, `AI_QUOTA_EXCEEDED` 429, `AI_NOT_CONFIGURED` 503,
+   `AI_INVALID_OUTPUT` 502, `AI_UPSTREAM_ERROR` 502. Le client les affiche avec `AiErrorDisplay`.
+5. La clé OpenRouter reste côté serveur ; le navigateur ne parle jamais au LLM.
 
-- Routes asynchrones enveloppées dans `asyncHandler`.
-- Utilisateur courant : `requireUser(req)` (lève 401 si absent), jamais `req.user!`.
-- Les embeddings ne sont **jamais** renvoyés par l'API (utiliser `serviceSelect`).
-- Les prix sont stockés en `Decimal(10,3)` (TND) et renvoyés en `number`.
-- Rate limiting : `authLimiter`, `searchLimiter`, `aiLimiter` (`middlewares/rate-limit.ts`),
-  désactivés quand `NODE_ENV=test`.
-- Les tests **ne téléchargent jamais le modèle** : `embedding.service` est toujours mocké.
-- Commits : Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`, `refactor:`).
+## Règles
 
-## Commandes (depuis `/server`)
+1. **Aucun `any`** (lint : erreur). Types explicites aux frontières (API, modèles).
+2. **Toute entrée est validée par Zod** : `validateBody(schema)` dans les routes ; les paramètres
+   d'URL (`:id`) sont validés dans le controller.
+3. **Erreurs centralisées** : lever `badRequest`/`unauthorized`/`forbidden`/`notFound`/`conflict`
+   (`core/errors.ts`). Format : `{ "error": { "code", "message", "details?" } }`, jamais de stack trace.
+4. Routes asynchrones dans `asyncHandler` ; utilisateur courant via `requireUser(req)`.
+5. **Aucun secret en dur** : `process.env` n'est lu que dans `core/config.ts`.
+6. Mots de passe hachés (bcryptjs) ; le hash n'est jamais renvoyé. Les services renvoient des objets
+   publics (`toPublic…`), jamais le document Mongoose brut.
+7. **Contrôle d'accès** : un client ne voit que ses véhicules, réservations et conversations ; un pro ne
+   gère que son garage, et doit être validé (`requireApprovedPro`) pour agir.
+8. Imports relatifs serveur avec l'extension **`.js`** (ESM). Alias `@/` côté client.
+9. Pas de dépendance nouvelle sans justification.
+10. Commentaires de code en anglais, textes visibles par l'utilisateur en français.
+
+## Tests
+
+- Chaque module a au minimum `tests/schema.test.ts` (schéma + mock) et `tests/<nom>.api.test.ts`
+  (parcours métier, contrôle d'accès, et réponse LLM invalide simulée avec `vi.stubGlobal('fetch', …)`).
+- Les tests ne font **jamais** d'appel réseau réel ; chaque fichier de test a sa propre base en mémoire.
+- Commits : Conventional Commits (`feat(maintenance): …`, `fix:`, `test:`, `docs:`, `chore:`).
+
+## Commandes (racine)
 
 ```bash
-docker compose up -d          # PostgreSQL (dev + base de test)
-npm run db:migrate            # migrations Prisma (dev)
-npm run seed                  # données factices + indexation des embeddings
-npm run dev                   # serveur en watch (http://localhost:3000)
-npm run build                 # compilation TypeScript
-npm test                      # tests Jest (base de test, modèle mocké)
-npm run lint                  # ESLint
-npm run reindex               # recalcule les embeddings de tous les services
-npm run eval                  # évaluation du modèle → eval/results.md
+npm run dev        # serveur (4000) + client (5173)
+npm test           # tous les tests
+npm run lint       # ESLint
+npm run build      # build complet
+npm run seed       # réinitialise la base de démo
+npm run typecheck -w server
 ```

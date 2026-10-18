@@ -1,187 +1,115 @@
 # API CarLoop Web
 
-Base URL : `http://localhost:3000/api` · Format : JSON · Auth : `Authorization: Bearer <token>`
+Base : `http://localhost:4000/api` (en dev, le front passe par le proxy Vite sur `/api`).
 
-## Conventions
+- **Auth** : `Authorization: Bearer <jwt>` (obtenu par `/auth/login` ou `/auth/register`).
+- **Corps** : JSON, validé par Zod. Une entrée invalide renvoie `400 VALIDATION_ERROR` avec `details`.
+- **Erreurs** : `{ "error": { "code": "NOT_FOUND", "message": "…", "details": … } }`.
+- **Rate limit** : toutes les routes `/api/ai/*` sont limitées à `AI_RATE_LIMIT_PER_MIN` appels par minute,
+  par utilisateur connecté (sinon par IP) → `429 RATE_LIMITED`.
 
-**Erreurs** — toutes les erreurs ont la même forme, sans stack trace ni détail interne :
+Légende des accès : **public**, **optionnel** (fonctionne sans compte, enrichi si connecté), **client**,
+**pro** (pro validé par l'admin), **admin**.
 
-```json
-{ "error": { "code": "VALIDATION_ERROR", "message": "Données invalides",
-             "details": [{ "path": "email", "message": "Email invalide" }] } }
-```
+## Cœur
 
-| Code HTTP | `error.code` | Quand |
+| Méthode | Route | Accès | Description |
+|---|---|---|---|
+| GET | `/health` | public | État du serveur, mode IA (`configured`, `mock`) et modules actifs |
+| GET | `/meta` | public | Données de référence : catégories (valeur + libellé) et villes |
+| POST | `/auth/register` | public | `{ name, email, password, phone?, role: "client"\|"pro", businessName?, city? }` (garage et ville obligatoires pour un pro, compte pro en attente de validation) |
+| POST | `/auth/login` | public | `{ email, password }` → `{ token, user }` |
+| GET | `/auth/me` | connecté | Utilisateur courant |
+| GET | `/providers` | public | Garages actifs. Query : `categorie`, `ville`, `budget_max`, `limit` (≤ 50) |
+| GET | `/providers/:id` | public | Fiche d'un garage (services, horaires, note) |
+| GET | `/providers/mine` | pro (rôle) | Garage du pro connecté |
+| PUT | `/providers/mine` | pro (rôle) | Modifie description, adresse, services, horaires |
+| GET | `/admin/stats` | admin | Statistiques globales (utilisateurs, réservations, appels IA) |
+| GET | `/admin/pros?status=pending` | admin | Comptes pro à valider |
+| PATCH | `/admin/pros/:id` | admin | `{ approved: boolean }` |
+
+## Module 1 — Recherche intelligente
+
+| Méthode | Route | Accès | Description |
+|---|---|---|---|
+| POST | `/ai/search` | optionnel | `{ query, filtres? }` |
+
+Si `filtres` est absent, le LLM extrait d'abord les critères de la phrase (catégorie, ville, budget,
+disponibilité, critères libres), puis classe les garages candidats. Si `filtres` est fourni (filtres
+manuels), l'extraction est sautée.
+
+Réponse : `{ filtres, filtres_assouplis, resultats: [{ ...garage, justification }] }`. Les garages que le LLM
+n'a pas classés sont ajoutés à la fin avec `justification: null`.
+`filtres_assouplis` indique quels filtres ont été relâchés faute de résultat.
+
+## Module 2 — Diagnostic
+
+| Méthode | Route | Accès | Description |
+|---|---|---|---|
+| POST | `/ai/diagnostic` | optionnel | `{ message, conversationId?, vehicule?: { marque?, modele?, annee? }, historique? }` |
+| GET | `/diagnostic/conversations` | connecté | Conversations de l'utilisateur |
+| GET | `/diagnostic/conversations/:id` | connecté | Une conversation et ses messages |
+| DELETE | `/diagnostic/conversations/:id` | connecté | Supprime une conversation |
+
+Réponse : `{ conversationId, diagnostic: { reponse, causes_probables, urgence, service_recommande, conseil_securite } }`.
+Connecté, la conversation est enregistrée (`conversationId`) ; anonyme, `conversationId` vaut `null`.
+
+## Module 3 — Estimation de devis et réservations
+
+| Méthode | Route | Accès | Description |
+|---|---|---|---|
+| POST | `/ai/quote-estimate` | optionnel | `{ vehicule: { marque, modele, annee, kilometrage, carburant }, categorie, service?, description?, providerId? }` → `{ estimation }` |
+| GET | `/bookings/slots?providerId=&date=AAAA-MM-JJ` | public | Créneaux libres d'un garage |
+| POST | `/bookings` | client | `{ providerId, serviceId, scheduledAt, vehicule, description?, estimation? }` → 201 (409 si le créneau est pris) |
+| GET | `/bookings/mine` | client | Réservations du client, avec leurs devis |
+| GET | `/bookings/pro?status=` | pro | Agenda du garage |
+| PATCH | `/bookings/:id/status` | client ou pro | `{ status: accepted\|rejected\|completed\|cancelled, note? }` (transitions contrôlées selon le rôle) |
+| POST | `/bookings/:id/quotes` | pro | `{ items: [{ label, amountTnd }], message? }` : envoie un devis |
+| PATCH | `/quotes/:id` | client | `{ decision: accepted\|declined }` |
+
+`estimation` : `{ prix_min_tnd, prix_max_tnd, pieces_probables: [{ piece, prix_estime_tnd }], main_oeuvre_heures, hypotheses, avertissement }`.
+Avec `providerId`, le prix catalogue du service du garage est fourni au LLM comme référence.
+
+## Module 4 — Avis
+
+| Méthode | Route | Accès | Description |
+|---|---|---|---|
+| POST | `/ai/reviews-summary/:providerId` | public | Résumé IA des avis (mis en cache, régénéré après un nouvel avis) |
+| POST | `/ai/review-reply` | pro | `{ reviewId }` → `{ propositions: [{ ton, texte }] }` (2 propositions) |
+| GET | `/reviews/provider/:providerId` | public | Avis publiés (auteur abrégé « Prénom N. ») |
+| GET | `/reviews/reviewable` | client | Réservations terminées pas encore notées |
+| POST | `/reviews` | client | `{ bookingId, rating: 1-5, comment }` (une seule fois par réservation terminée) |
+| GET | `/reviews/pro` | pro | Avis reçus par le garage |
+| PUT | `/reviews/:id/reply` | pro | `{ text }` : publie la réponse du garage |
+
+Résumé : `{ summary: { resume, sentiment_global: positif|mitige|negatif, points_forts, points_faibles, score_confiance }, reviewsCount, cached, generatedAt }`
+(`summary` vaut `null` si le garage n'a aucun avis).
+
+## Module 5 — Véhicules et plan d'entretien
+
+Toutes les routes sont réservées au **client** propriétaire du véhicule (404 pour un autre client).
+
+| Méthode | Route | Description |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` / `BAD_REQUEST` | Entrée invalide (Zod), JSON mal formé |
-| 401 | `UNAUTHORIZED` | Token absent, invalide ou expiré ; identifiants incorrects |
-| 403 | `FORBIDDEN` | Rôle non autorisé ou ressource d'un autre utilisateur |
-| 404 | `NOT_FOUND` | Ressource ou route inexistante |
-| 409 | `CONFLICT` | Email déjà utilisé, transition de statut invalide, suppression bloquée par des réservations |
-| 413 | `PAYLOAD_TOO_LARGE` | Corps > 100 ko |
-| 429 | `TOO_MANY_REQUESTS` | Limite de débit atteinte |
-| 500 | `INTERNAL_ERROR` | Erreur inattendue (journalisée côté serveur) |
-| 501 | `NOT_IMPLEMENTED` | Fonctionnalité pas encore disponible |
+| GET | `/vehicles` | Véhicules du client |
+| POST | `/vehicles` | `{ marque, modele, annee, kilometrage, carburant, usage: urbain\|mixte\|autoroute, plaque?, surnom? }` → 201 |
+| GET | `/vehicles/:id` | `{ vehicle, records, plan }` (dernier plan généré ou `null`) |
+| PUT | `/vehicles/:id` | Modifie le véhicule |
+| DELETE | `/vehicles/:id` | Supprime le véhicule et son historique → 204 |
+| POST | `/vehicles/:id/records` | `{ date: AAAA-MM-JJ, kilometrage, intervention, categorie, coutTnd?, notes? }` → 201 (le kilométrage du véhicule suit le dernier entretien) |
+| DELETE | `/vehicles/:id/records/:recordId` | Retire un entretien → 204 |
+| POST | `/ai/maintenance-plan/:vehicleId` | Génère et enregistre le plan → `{ plan, generatedAt }` |
 
-**Pagination** — query `page` (≥ 1, défaut 1) et `pageSize` (1..50, défaut 20). Réponse :
-`{ items, total, page, pageSize, totalPages }`.
+`plan` : `{ prochains_entretiens: [{ intervention, echeance_km, echeance_date, priorite: faible|moyenne|haute, categorie_service }], conseils, resume }`.
+Chaque échéance est ≥ kilométrage actuel et ≥ date du jour (sinon la réponse du LLM est rejetée).
+La plaque, le surnom et les coûts ne sont jamais envoyés au LLM.
 
-**Identifiants** — cuid (ex. `cmg7x2k0f0000abcd1234efgh`) ; un id mal formé renvoie 400.
+## Erreurs IA
 
-**Prix** — en dinars tunisiens (number, 3 décimales max).
-
-**Rate limiting** — `/auth/login` et `/auth/register` : 10 req / 15 min / IP ;
-`/services/search` : 30 req / min / IP ; `/ai/diagnose` : 3 req / min / utilisateur,
-20 / jour / utilisateur, 45 / jour au total. En-têtes `RateLimit` (draft-8) renvoyés.
-
-### Objets
-
-```ts
-User        { id, email, firstName, lastName, phone: string | null, role: 'CLIENT'|'PRO'|'ADMIN', createdAt }
-Garage      { id, name, address, city, description, ownerId, createdAt, updatedAt, _count: { services } }
-Service     { id, garageId, category, title, description, price, durationMinutes, createdAt, updatedAt,
-              garage: { id, name, city, address } }
-Reservation { id, scheduledAt, status: 'PENDING'|'CONFIRMED'|'CANCELLED'|'DONE', note, createdAt, updatedAt,
-              client: { id, firstName, lastName, phone },
-              service: { id, title, category, price, durationMinutes, garage: { id, name, city, address } } }
-```
-
-`category` ∈ `LAVAGE`, `VIDANGE`, `PNEUS`, `CLIM`, `ELECTRICITE`, `CARROSSERIE`, `MECANIQUE`, `DEPANNAGE`.
-
----
-
-## Santé
-
-### `GET /health` — public
-`200` `{ "status": "ok", "embeddingModel": "ready" | "loading" | "failed" | "disabled" | "idle" }`
-
----
-
-## Authentification
-
-### `POST /auth/register` — public
-Body :
-```json
-{ "email": "sana@example.tn", "password": "8 à 72 caractères", "firstName": "Sana", "lastName": "Ben Ali",
-  "phone": "+216 20 123 456", "role": "CLIENT" }
-```
-`phone` optionnel ; `role` ∈ `CLIENT` (défaut) | `PRO` (ADMIN interdit). Email normalisé en minuscules.
-- `201` `{ "user": User, "token": "<jwt>" }`
-- `400` entrée invalide · `409` email déjà utilisé · `429`
-
-### `POST /auth/login` — public
-Body : `{ "email", "password" }`
-- `200` `{ "user": User, "token": "<jwt>" }`
-- `400` · `401` « Email ou mot de passe incorrect » (message générique) · `429`
-
-### `GET /auth/me` — connecté
-- `200` `{ "user": User }` · `401`
-
-> Le hash du mot de passe n'est jamais renvoyé. Durée du token : `JWT_EXPIRES_IN` (défaut 1 jour).
-
----
-
-## Garages
-
-| Méthode | URL | Rôle | Body / Query | Succès | Erreurs |
-|---|---|---|---|---|---|
-| GET | `/garages` | public | `?ville&page&pageSize` | `200` paginé de `Garage` | 400 |
-| GET | `/garages/mine` | PRO | — | `200` `{ items: Garage[] }` | 401, 403 |
-| GET | `/garages/:id` | public | — | `200` `Garage & { services: Service[] }` | 400, 404 |
-| POST | `/garages` | PRO | `{ name, address, city, description }` | `201` `Garage` | 400, 401, 403 |
-| PATCH | `/garages/:id` | PRO propriétaire (ou ADMIN) | champs partiels (≥ 1) | `200` `Garage` | 400, 401, 403, 404 |
-| DELETE | `/garages/:id` | PRO propriétaire (ou ADMIN) | — | `204` | 401, 403, 404, 409 (réservations existantes) |
-
-Contraintes : `name` 2..100, `address` 5..200, `city` 2..60, `description` 10..1000. Filtre `ville` insensible à la casse.
-
----
-
-## Services
-
-| Méthode | URL | Rôle | Body / Query | Succès | Erreurs |
-|---|---|---|---|---|---|
-| GET | `/services` | public | `?categorie&ville&garageId&page&pageSize` | `200` paginé de `Service` | 400 |
-| GET | `/services/search` | public | `?q&ville&limit` (voir ci-dessous) | `200` | 400, 429 |
-| GET | `/services/:id` | public | — | `200` `Service` | 400, 404 |
-| POST | `/services` | PRO propriétaire du garage (ou ADMIN) | `{ garageId, category, title, description, price, durationMinutes }` | `201` `Service` | 400, 401, 403, 404 (garage) |
-| PATCH | `/services/:id` | PRO propriétaire (ou ADMIN) | champs partiels (≥ 1, sauf `garageId`) | `200` `Service` | 400, 401, 403, 404 |
-| DELETE | `/services/:id` | PRO propriétaire (ou ADMIN) | — | `204` | 401, 403, 404, 409 (réservations existantes) |
-
-Contraintes : `title` 3..120, `description` 10..2000, `price` > 0 (≤ 100 000), `durationMinutes` 5..1440.
-À chaque création / modification du texte (titre, catégorie, description), l'embedding du service est recalculé.
-
-### `GET /services/search` — recherche sémantique — public
-
-| Paramètre | Type | Règle |
+| Code | HTTP | Cause |
 |---|---|---|
-| `q` | string | obligatoire, 1..300 caractères (après trim) |
-| `ville` | string | optionnel, 2..60 caractères, insensible à la casse |
-| `limit` | int | optionnel, 1..20, défaut 5 |
-
-Réponse `200` — mode sémantique :
-```json
-{
-  "mode": "semantic",
-  "query": "bruit quand je freine",
-  "minScore": 0.83,
-  "results": [
-    { "score": 0.8646, "service": { "id": "…", "title": "Diagnostic bruit moteur et fuite d’huile",
-      "category": "MECANIQUE", "price": 60, "durationMinutes": 60, "garage": { "name": "Cap Bon Garage", "city": "Nabeul", … }, … } },
-    { "score": 0.8499, "service": { "title": "Réparation de l’échappement", … } },
-    { "score": 0.8494, "service": { "title": "Remplacement plaquettes et disques de frein", … } }
-  ]
-}
-```
-
-Réponse `200` — repli mots-clés (modèle non chargé, en échec ou trop lent) :
-```json
-{ "mode": "keyword", "query": "plaquettes de frein", "fallbackReason": "model_unavailable", "results": [ … ] }
-```
-`fallbackReason` ∈ `model_unavailable` | `model_error`. En mode mots-clés, `score` = proportion des mots de la requête retrouvés.
-
-- Les résultats sous le seuil `minScore` (`SEARCH_MIN_SCORE`) ne sont pas renvoyés : `results: []` = aucun service pertinent.
-- `400` : `q` absent, vide ou > 300 caractères. `429` : limite de débit.
-
----
-
-## Réservations (toutes authentifiées)
-
-| Méthode | URL | Rôle | Body / Query | Succès | Erreurs |
-|---|---|---|---|---|---|
-| POST | `/reservations` | CLIENT | `{ serviceId, scheduledAt, note? }` | `201` `Reservation` (`PENDING`) | 400, 401, 403, 404 (service) |
-| GET | `/reservations/mine` | connecté | `?status` | `200` `{ items: Reservation[] }` | 400, 401 |
-| PATCH | `/reservations/:id/status` | voir règles | `{ status }` | `200` `Reservation` | 400, 401, 403, 404, 409 |
-
-- `scheduledAt` : date ISO 8601 **avec fuseau** et **dans le futur** (ex. `2026-11-05T09:30:00+01:00`) ; `note` ≤ 500 caractères.
-- `GET /mine` : un **CLIENT** voit ses réservations, un **PRO** celles des services de ses garages, un ADMIN toutes.
-- Changement de statut :
-
-| Acteur | Transitions autorisées | Sinon |
-|---|---|---|
-| PRO propriétaire du service (ou ADMIN) | `PENDING → CONFIRMED | CANCELLED`, `CONFIRMED → DONE | CANCELLED` | `409` |
-| CLIENT auteur de la réservation | `PENDING → CANCELLED` uniquement | `403` |
-| Tout autre utilisateur | — | `403` |
-
----
-
-## IA — Diagnostic (Akrem)
-
-### `POST /ai/diagnose` — CLIENT — **stub, renvoie 501**
-Body (déjà validé) :
-```json
-{ "symptom": "10 à 1000 caractères",
-  "vehicle": { "brand": "Peugeot", "model": "208", "year": 2016, "mileageKm": 120000, "fuel": "DIESEL" } }
-```
-`vehicle` et chacun de ses champs sont optionnels ; `fuel` ∈ `ESSENCE`, `DIESEL`, `HYBRIDE`, `ELECTRIQUE`, `GPL`.
-- Actuel : `501 NOT_IMPLEMENTED` · `400` · `401` · `403` (non CLIENT) · `429`
-- Cible : `200` `DiagnoseResult` (voir `server/src/services/ai.service.ts`).
-
----
-
-## À venir
-
-| Endpoint | Responsable | Notes |
-|---|---|---|
-| `POST /reviews` | **Amine** | CLIENT, une seule review par réservation `DONE` (contrainte unique en base), note 1..5 |
-| Résumé IA des avis d'un garage | **Amine** | Modèle `Review` déjà présent |
-| `POST /ai/diagnose` (implémentation) | **Akrem** | LLM via OpenRouter, table `Diagnostic` déjà présente |
+| `AI_TIMEOUT` | 504 | Le LLM n'a pas répondu dans `AI_TIMEOUT_MS` |
+| `AI_QUOTA_EXCEEDED` | 429 | Quota OpenRouter atteint (après un nouvel essai) |
+| `AI_NOT_CONFIGURED` | 503 | Pas de clé et `AI_MOCK=false` |
+| `AI_INVALID_OUTPUT` | 502 | Réponse non conforme au schéma, même après la relance corrective |
+| `AI_UPSTREAM_ERROR` | 502 | Erreur du fournisseur (5xx répétés, réseau) |
